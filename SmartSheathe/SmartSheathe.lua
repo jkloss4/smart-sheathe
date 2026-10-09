@@ -5,7 +5,8 @@
 --   - eating or drinking: drawn again once the food or drink is gone and you move
 --   - mounting, a druid or shaman form, swimming, a taxi or vehicle, dying: left away, the game
 --     puts weapons away for those on purpose
---   - anything else (looting, leaving combat): drawn again once the loot window is closed and nothing is being cast
+--   - anything else (looting, talking to an NPC, leaving combat): drawn again once the loot window or NPC is closed
+--     and nothing is being cast; if the game keeps putting them straight back away, they're left away
 -- Optionally, weapons are also drawn when you target an enemy or enter combat.
 
 local addonName, ns = ...
@@ -16,6 +17,8 @@ local USER_WINDOW = 1.5            -- a sheathe this soon after your own key pre
 local REDRAW_DELAY = 0.3           -- let the game finish what it's doing before drawing again
 local REDRAW_GIVE_UP = 30          -- a redraw still blocked after this long is dropped
 local RETRY_AFTER = 1              -- a draw that didn't take is tried again after this long, once
+local FIGHT_WINDOW = 2             -- the game sheathing again this soon after a draw means it wants them away
+local FIGHT_LIMIT = 2              -- and after this many in a row, they're left away
 
 local DEFAULTS = { drawOnTarget = false, drawOnCombat = false, sheatheAfterCombat = false, sheatheDelay = 3 }
 local CHAR_DEFAULTS = { enabled = true }
@@ -25,6 +28,8 @@ local userUntil = 0                -- sheathes before this time were done by you
 local pendingSince                 -- when a redraw was queued (nil: none queued)
 local pendingAt                    -- earliest time to try it
 local tries = 0
+local lastDrawAt = 0
+local fights = 0                   -- times in a row the game put weapons straight back away after a draw
 local looting = false
 local ourToggle = false
 local sheatheTimer               -- counting down to sheathing after combat (nil: not counting)
@@ -88,6 +93,8 @@ end
 -- What keeps a draw waiting for now (it's tried once this clears), or nil
 local function Busy()
     if looting then return "looting" end
+    -- talking to an NPC (gossip, quests, a vendor, a trainer): the game keeps weapons away until you're done
+    if UnitExists("npc") then return "talking" end
     if UnitCastingInfo("player") or UnitChannelInfo("player") then return "casting" end
     return nil
 end
@@ -96,6 +103,7 @@ local function Draw(why)
     ourToggle = true
     ToggleSheath()
     ourToggle = false
+    lastDrawAt = GetTime()
     Trace("drawing weapons (%s)", why)
 end
 
@@ -149,6 +157,13 @@ local function OnSheathed()
         Trace("sheathed by the game after combat, left away (Sheathe After Combat is on)")
         return
     end
+    -- something unknown that keeps weapons away: don't fight the game over it
+    if GetTime() - lastDrawAt < FIGHT_WINDOW then fights = fights + 1 else fights = 0 end
+    if fights >= FIGHT_LIMIT then
+        fights = 0
+        Trace("the game keeps putting them away, left away")
+        return
+    end
     Trace("sheathed by the game, drawing again")
     pendingSince = GetTime()
     pendingAt = pendingSince + REDRAW_DELAY
@@ -171,7 +186,13 @@ local function TryRedraw(now)
         if reason == "eating" then WaitForMeal() end
         return
     end
-    if now < pendingAt or Busy() then return end
+    -- waiting for looting, talking or casting to finish doesn't count toward giving up (a vendor can take a while)
+    if Busy() then
+        pendingSince = now
+        pendingAt = math.max(pendingAt, now + REDRAW_DELAY)
+        return
+    end
+    if now < pendingAt then return end
     if tries >= 2 then
         CancelRedraw("didn't take")
         return
