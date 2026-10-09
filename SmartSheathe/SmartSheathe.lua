@@ -26,6 +26,7 @@ local pendingAt                    -- earliest time to try it
 local tries = 0
 local looting = false
 local ourToggle = false
+local sheatheTimer               -- counting down to sheathing after combat (nil: not counting)
 
 local function Enabled()
     return SmartSheatheCharDB and SmartSheatheCharDB.enabled
@@ -129,6 +130,13 @@ local function OnSheathed()
         Trace("sheathed (%s), left away", reason)
         return
     end
+    -- sheathing after combat is counting down: the game just did it sooner (looting right after a fight)
+    if sheatheTimer then
+        sheatheTimer:Cancel()
+        sheatheTimer = nil
+        Trace("sheathed by the game after combat, left away (Sheathe After Combat is on)")
+        return
+    end
     Trace("sheathed by the game, drawing again")
     pendingSince = GetTime()
     pendingAt = pendingSince + REDRAW_DELAY
@@ -195,7 +203,7 @@ end
 
 -- Sheathing after combat: once you've been out of combat for the set delay (and nothing is being looted or cast),
 -- weapons are put away. Counts as your own sheathe, so it isn't drawn again. Entering combat calls it off.
-local sheatheTimer
+-- sheatheTimer is declared with the other state, since a game sheathe while it counts down is left away (OnSheathed).
 
 local function CancelSheathe()
     if sheatheTimer then
@@ -209,11 +217,16 @@ local function SheatheAfterCombat()
     if not (Enabled() and SmartSheatheDB.sheatheAfterCombat) then return end
     local at = GetTime() + (SmartSheatheDB.sheatheDelay or DEFAULTS.sheatheDelay)
     sheatheTimer = C_Timer.NewTicker(0.25, function()
-        if InCombatLockdown() or Sheathed() then
+        if InCombatLockdown() then
             CancelSheathe()
             return
         end
         if GetTime() < at or Busy() then return end
+        -- already away (your key, or the game while this counted down): nothing left to do
+        if Sheathed() then
+            CancelSheathe()
+            return
+        end
         CancelSheathe()
         CancelRedraw("sheathing after combat")
         userUntil = GetTime() + USER_WINDOW
