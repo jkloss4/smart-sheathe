@@ -11,8 +11,10 @@ Retail (Interface 120100) and WoW: Forever (Interface 16001).
   leaving combat), they're drawn again once the loot window closes.
 - **Your choice wins.** Putting them away with the Sheathe/Unsheathe key (Z by default), sitting or an emote is left
   alone.
-- **Out of the way.** Mounting, druid forms and Ghost Wolf, swimming, taxis and vehicles, eating and drinking, and
-  dying all put weapons away on purpose, so those are left alone too.
+- **After eating or drinking.** Weapons that were out are drawn again once the food or drink is gone and you get up
+  and move.
+- **Out of the way.** Mounting, druid forms and Ghost Wolf, swimming, taxis and vehicles, and dying all put weapons
+  away on purpose, so those are left alone too.
 - **Optional triggers:** draw your weapons when you target an enemy, or when you enter combat.
 - **Sheathe after combat (optional):** put your weapons away once you've been out of combat for a set delay
   (0.5 to 10 seconds).

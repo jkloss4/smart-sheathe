@@ -2,7 +2,8 @@
 -- The game has no sheathe event, so the sheath state is checked a few times a second. When it goes from drawn to
 -- sheathed, the cause decides what happens:
 --   - your Sheathe/Unsheathe key (ToggleSheath), sitting or an emote: left away, that was you
---   - mounting, a druid or shaman form, swimming, a taxi or vehicle, eating or drinking, dying: left away, the game
+--   - eating or drinking: drawn again once the food or drink is gone and you move
+--   - mounting, a druid or shaman form, swimming, a taxi or vehicle, dying: left away, the game
 --     puts weapons away for those on purpose
 --   - anything else (looting, leaving combat): drawn again once the loot window is closed and nothing is being cast
 -- Optionally, weapons are also drawn when you target an enemy or enter combat.
@@ -106,9 +107,19 @@ local function CancelRedraw(why)
 end
 
 -- Your own sheathe/unsheathe: whatever it does next is your choice
+-- Eating or drinking sits you down and puts weapons away; once the food or drink is gone and you get up and move,
+-- they're drawn again (drawing while still seated would look odd, and the buff can end while you sit)
+local afterEating = false
+
+local function WaitForMeal()
+    if not afterEating then Trace("eating or drinking, drawing again once you move") end
+    afterEating = true
+end
+
 local function MarkUser(why)
     userUntil = GetTime() + USER_WINDOW
     CancelRedraw(why)
+    afterEating = false
 end
 
 hooksecurefunc("ToggleSheath", function()
@@ -128,6 +139,7 @@ local function OnSheathed()
     local reason = GameReason()
     if reason then
         Trace("sheathed (%s), left away", reason)
+        if reason == "eating" then WaitForMeal() end
         return
     end
     -- sheathing after combat is counting down: the game just did it sooner (looting right after a fight)
@@ -156,6 +168,7 @@ local function TryRedraw(now)
     local reason = GameReason()
     if reason then
         CancelRedraw(reason)
+        if reason == "eating" then WaitForMeal() end
         return
     end
     if now < pendingAt or Busy() then return end
@@ -166,6 +179,22 @@ local function TryRedraw(now)
     tries = tries + 1
     pendingAt = now + RETRY_AFTER
     Draw("after the game put them away")
+end
+
+-- Done eating: the food or drink is gone and you're moving (unless you got on a mount or into the water instead)
+local function CheckMealDone()
+    if not Sheathed() then
+        afterEating = false
+        return
+    end
+    if GetUnitSpeed("player") == 0 or EatingOrDrinking() then return end
+    afterEating = false
+    local reason = GameReason()
+    if reason then
+        Trace("done eating, but %s: left away", reason)
+        return
+    end
+    Draw("done eating or drinking")
 end
 
 local elapsed = 0
@@ -186,6 +215,7 @@ poller:SetScript("OnUpdate", function(_, delta)
     end
     lastState = state
     if pendingSince then TryRedraw(GetTime()) end
+    if afterEating then CheckMealDone() end
 end)
 
 -- Drawing on a trigger (an enemy targeted, combat started), unless something the game sheathes for is going on
@@ -241,6 +271,7 @@ local function UpdatePolling()
     poller:SetShown(Enabled() and true or false)
     lastState = GetSheathState()
     pendingSince = nil
+    afterEating = false
 end
 
 -- Options page (Options > AddOns > Smart Sheathe), drawn in Blizzard's settings style by SettingsKit
@@ -274,8 +305,9 @@ page:Checkbox("Enable on This Character",
     end,
     function()
         return ("Keep %s's weapons drawn. When the game puts them away (after looting or combat) they're drawn again; "
-            .. "when you put them away with your Sheathe/Unsheathe key they stay away. Mounting, shapeshifting, "
-            .. "swimming, eating and drinking are left alone. Saved per character, so it can stay off on a caster.")
+            .. "when you put them away with your Sheathe/Unsheathe key they stay away. After eating or drinking "
+            .. "they're drawn again once you get up and move. Mounting, shapeshifting and swimming are left alone. "
+            .. "Saved per character, so it can stay off on a caster.")
             :format(UnitName("player") or "this character")
     end)
 
