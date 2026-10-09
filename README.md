@@ -14,6 +14,8 @@ Retail (Interface 120100) and WoW: Forever (Interface 16001).
 - **Out of the way.** Mounting, druid forms and Ghost Wolf, swimming, taxis and vehicles, eating and drinking, and
   dying all put weapons away on purpose, so those are left alone too.
 - **Optional triggers:** draw your weapons when you target an enemy, or when you enter combat.
+- **Sheathe after combat (optional):** put your weapons away once you've been out of combat for a set delay
+  (0.5 to 10 seconds).
 - **Per character.** *Enable on This Character* is saved per character, so it can stay off on a caster.
 
 Options are in Options → AddOns → Smart Sheathe.

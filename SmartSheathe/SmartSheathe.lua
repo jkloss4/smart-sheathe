@@ -16,7 +16,7 @@ local REDRAW_DELAY = 0.3           -- let the game finish what it's doing before
 local REDRAW_GIVE_UP = 30          -- a redraw still blocked after this long is dropped
 local RETRY_AFTER = 1              -- a draw that didn't take is tried again after this long, once
 
-local DEFAULTS = { drawOnTarget = false, drawOnCombat = false }
+local DEFAULTS = { drawOnTarget = false, drawOnCombat = false, sheatheAfterCombat = false, sheatheDelay = 3 }
 local CHAR_DEFAULTS = { enabled = true }
 
 local lastState
@@ -193,6 +193,37 @@ local function HostileTarget()
     return attackable
 end
 
+-- Sheathing after combat: once you've been out of combat for the set delay (and nothing is being looted or cast),
+-- weapons are put away. Counts as your own sheathe, so it isn't drawn again. Entering combat calls it off.
+local sheatheTimer
+
+local function CancelSheathe()
+    if sheatheTimer then
+        sheatheTimer:Cancel()
+        sheatheTimer = nil
+    end
+end
+
+local function SheatheAfterCombat()
+    CancelSheathe()
+    if not (Enabled() and SmartSheatheDB.sheatheAfterCombat) then return end
+    local at = GetTime() + (SmartSheatheDB.sheatheDelay or DEFAULTS.sheatheDelay)
+    sheatheTimer = C_Timer.NewTicker(0.25, function()
+        if InCombatLockdown() or Sheathed() then
+            CancelSheathe()
+            return
+        end
+        if GetTime() < at or Busy() then return end
+        CancelSheathe()
+        CancelRedraw("sheathing after combat")
+        userUntil = GetTime() + USER_WINDOW
+        ourToggle = true
+        ToggleSheath()
+        ourToggle = false
+        Trace("sheathing weapons (out of combat)")
+    end)
+end
+
 local function UpdatePolling()
     poller:SetShown(Enabled() and true or false)
     lastState = GetSheathState()
@@ -242,6 +273,22 @@ page:Checkbox("When Targeting an Enemy", getTarget, setTarget,
 local getCombat, setCombat = option("drawOnCombat")
 page:Checkbox("When Entering Combat", getCombat, setCombat,
     "Draw your weapons as soon as you enter combat, before you attack.", needsEnabled)
+
+page:Header("Sheathe Weapons")
+local getSheathe, setSheathe = option("sheatheAfterCombat")
+page:Checkbox("After Combat", getSheathe, setSheathe,
+    "Put your weapons away once you've been out of combat for the delay below. Entering combat again before then "
+        .. "keeps them out.", needsEnabled)
+local getDelay, setDelay = option("sheatheDelay")
+page:Slider("Delay", 0.5, 10, 0.5, getDelay, setDelay,
+    function(value) return ("%.1f sec"):format(value) end,
+    "How long after combat ends to put your weapons away.", {
+        indent = 2,
+        enabled = function() return Enabled() and SmartSheatheDB.sheatheAfterCombat end,
+        disabledTooltip = function()
+            return Enabled() and "Turn on After Combat to set its delay." or needsEnabled.disabledTooltip
+        end,
+    })
 Kit.Register(page)
 
 -- Slash command: /smartsheathe (options), /smartsheathe on|off (this character), /smartsheathe trace
@@ -268,6 +315,7 @@ events:RegisterEvent("LOOT_OPENED")
 events:RegisterEvent("LOOT_CLOSED")
 events:RegisterEvent("PLAYER_TARGET_CHANGED")
 events:RegisterEvent("PLAYER_REGEN_DISABLED")
+events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 ~= addonName then return end
@@ -291,6 +339,9 @@ events:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "PLAYER_TARGET_CHANGED" then
         if SmartSheatheDB.drawOnTarget and HostileTarget() then DrawFor("enemy targeted") end
     elseif event == "PLAYER_REGEN_DISABLED" then
+        CancelSheathe()
         if SmartSheatheDB.drawOnCombat then DrawFor("entered combat") end
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        SheatheAfterCombat()
     end
 end)
