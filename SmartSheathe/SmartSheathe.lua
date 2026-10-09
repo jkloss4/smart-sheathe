@@ -51,11 +51,14 @@ local FORM_CLASSES = { DRUID = true, SHAMAN = true }
 
 local EATING = { Food = true, Drink = true, ["Food & Drink"] = true, Refreshment = true }
 
+-- Retail keeps auras secret in combat (reading them there is an error), and you can't eat or drink in combat anyway
 local function EatingOrDrinking()
+    if InCombatLockdown() or UnitAffectingCombat("player") then return false end
     for index = 1, 40 do
         local name
         if C_UnitAuras and C_UnitAuras.GetBuffDataByIndex then
-            local aura = C_UnitAuras.GetBuffDataByIndex("player", index)
+            local ok, aura = pcall(C_UnitAuras.GetBuffDataByIndex, "player", index)
+            if not ok then return false end
             name = aura and aura.name
         elseif UnitBuff then
             name = UnitBuff("player", index)
