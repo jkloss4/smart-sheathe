@@ -23,7 +23,8 @@ Retail (Interface 120100) and WoW: Forever (Interface 16001).
 Options are in Options → AddOns → Smart Sheathe.
 
 Slash commands: `/smartsheathe` (options), `/smartsheathe on` / `off` (this character), `/smartsheathe trace` (prints
-what it sees and does to chat).
+what it sees and does to chat, and keeps the last 500 lines in `SmartSheatheDB.traceLog` in the saved variables file,
+written on `/reload` or logout), `/smartsheathe trace clear` (empties the saved trace).
 
 ## Install
 

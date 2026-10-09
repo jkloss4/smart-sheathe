@@ -42,9 +42,22 @@ local function Tracing()
     return SmartSheatheDB and SmartSheatheDB.trace == true
 end
 
+-- Trace lines are also kept in SmartSheatheDB.traceLog (the last TRACE_LOG_MAX), so they can be read from the saved
+-- variables file after a /reload or logout instead of from chat. Each starts with the clock time.
+local TRACE_LOG_MAX = 500
+
+local function SaveTraceLine(line)
+    local log = SmartSheatheDB.traceLog or {}
+    SmartSheatheDB.traceLog = log
+    log[#log + 1] = date("%H:%M:%S") .. " " .. line
+    while #log > TRACE_LOG_MAX do table.remove(log, 1) end
+end
+
 local function Trace(fmt, ...)
     if Tracing() then
-        print(("|cff88ccffSmart Sheathe|r [%.1f] " .. fmt):format(GetTime(), ...))
+        local line = ("[%.1f] " .. fmt):format(GetTime(), ...)
+        print("|cff88ccffSmart Sheathe|r " .. line)
+        SaveTraceLine(line)
     end
 end
 
@@ -368,7 +381,12 @@ SlashCmdList["SMARTSHEATHE"] = function(msg)
         print(("Smart Sheathe: %s for %s."):format(msg == "on" and "on" or "off", UnitName("player")))
     elseif msg == "trace" then
         SmartSheatheDB.trace = not Tracing()
-        print(("Smart Sheathe: trace %s."):format(Tracing() and "on" or "off"))
+        print(("Smart Sheathe: trace %s."):format(Tracing()
+            and "on (also saved to disk on /reload or logout)" or "off"))
+        if Tracing() then SaveTraceLine("---- trace on") end
+    elseif msg == "trace clear" then
+        SmartSheatheDB.traceLog = nil
+        print("Smart Sheathe: saved trace cleared.")
     else
         Kit.Open(page)
     end
@@ -388,6 +406,9 @@ events:SetScript("OnEvent", function(self, event, arg1)
         self:UnregisterEvent("ADDON_LOADED")
         SmartSheatheDB = SmartSheatheDB or {}
         SmartSheatheCharDB = SmartSheatheCharDB or {}
+        if Tracing() then
+            SaveTraceLine(("---- login or reload (%s, %s)"):format(date("%Y-%m-%d"), UnitName("player") or "?"))
+        end
         for key, value in pairs(DEFAULTS) do
             if SmartSheatheDB[key] == nil then SmartSheatheDB[key] = value end
         end
