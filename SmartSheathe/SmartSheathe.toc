@@ -1,4 +1,4 @@
-## Interface: 120100, 16001
+## Interface: 120100, 120105, 16001
 ## Title: Smart Sheathe
 ## Notes: Keeps your weapons drawn when the game puts them away after looting or combat.
 ## Version: 1.0.0
