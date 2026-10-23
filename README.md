@@ -29,8 +29,8 @@ written on `/reload` or logout), `/smartsheathe trace clear` (empties the saved 
 ## Install
 
 Download `SmartSheathe-<version>.zip` from the [latest release](../../releases/latest) and extract the
-`SmartSheathe` folder into `World of Warcraft\_classic_beta_\Interface\AddOns\` for WoW: Forever (`_retail_`
-instead of `_classic_beta_` for retail).
+`SmartSheathe` folder into `World of Warcraft\_forever_\Interface\AddOns\` for WoW: Forever (`_retail_`
+instead of `_forever_` for retail).
 
 An addon manager that installs from GitHub releases (e.g. WowUp: *Install from URL* with this repo's URL) can also
 install and update it, **but only if the repository is public**.
