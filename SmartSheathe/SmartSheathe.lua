@@ -15,7 +15,10 @@ local addonName, ns = ...
 local SHEATHED = 1                 -- GetSheathState: 1 = sheathed, 2 = melee drawn, 3 = ranged drawn
 local MELEE = 2
 local RANGED = 3
-local STEP_GIVE_UP = 2             -- a second key press waiting for the first one to take is dropped after this long
+local STEP_GIVE_UP = 4             -- a second key press that hasn't taken by this long after the first is dropped
+local STEP_WAIT = 0.4              -- the game ignores a press while the last draw or sheathe is still playing
+local STEP_RETRY = 0.8             -- a second press that didn't take is tried again after this long
+local STEP_TRIES = 3
 local POLL_INTERVAL = 0.1
 local USER_WINDOW = 1.5            -- a sheathe this soon after your own key press (or sitting) is yours
 local REDRAW_DELAY = 0.3           -- let the game finish what it's doing before drawing again
@@ -118,9 +121,14 @@ end
 
 -- With a ranged weapon equipped (Forever), the Sheathe/Unsheathe key cycles sheathed -> melee -> ranged -> sheathed.
 -- So bringing the bow back out is two presses, and putting melee away is two presses too (melee -> ranged ->
--- sheathed). The second press waits for the first one to show in the sheath state.
+-- sheathed). The second press waits for the first one to show in the sheath state (and its animation to finish),
+-- and is tried again if the game ignored it.
 local lastDrawn = MELEE            -- the weapon last seen out
-local nextStep                     -- { from = state to press again at, give = time to give up }
+local nextStep                     -- { from = state to press again at, give = time to give up, at, tries }
+
+local function NewStep(from)
+    return { from = from, give = GetTime() + STEP_GIVE_UP, tries = 0 }
+end
 
 local function Toggle()
     ourToggle = true
@@ -136,7 +144,7 @@ local function Draw(why)
     Toggle()
     lastDrawAt = GetTime()
     if lastDrawn == RANGED and HasRangedWeapon() then
-        nextStep = { from = MELEE, give = GetTime() + STEP_GIVE_UP }
+        nextStep = NewStep(MELEE)
         Trace("drawing ranged weapon (%s)", why)
     else
         nextStep = nil
@@ -147,19 +155,29 @@ end
 local function Sheathe()
     local fromMelee = GetSheathState() == MELEE and HasRangedWeapon()
     Toggle()
-    nextStep = fromMelee and { from = RANGED, give = GetTime() + STEP_GIVE_UP } or nil
+    nextStep = fromMelee and NewStep(RANGED) or nil
 end
 
--- Called by the poller: the second press, once the first one shows
+-- Called by the poller: the second press, once the first one shows. Done when the state moves past `from`.
 local function CheckNextStep(state)
-    if not nextStep then return end
-    if GetTime() > nextStep.give then
-        Trace("second key press dropped (the first didn't take)")
+    local step = nextStep
+    if not step then return end
+    local now = GetTime()
+    if step.tries > 0 and state ~= step.from then
+        Trace("second key press took")
         nextStep = nil
-    elseif state == nextStep.from then
+    elseif now > step.give or step.tries >= STEP_TRIES and now >= step.at then
+        Trace("second key press dropped (the game didn't take it)")
         nextStep = nil
+    elseif state == step.from then
+        if not step.at then step.at = now + STEP_WAIT end
+        if now < step.at then return end
+        step.tries = step.tries + 1
+        step.at = now + STEP_RETRY
         Toggle()
-        if state == RANGED then userUntil = GetTime() + USER_WINDOW end
+        if state == RANGED then userUntil = now + USER_WINDOW end
+        Trace("second key press (%s, try %d)", state == MELEE and "melee to ranged" or "ranged to sheathed",
+            step.tries)
     end
 end
 
