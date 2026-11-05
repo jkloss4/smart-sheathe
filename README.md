@@ -8,7 +8,9 @@ Retail (Interface 120100) and WoW: Forever (Interface 16001).
 ## Features
 
 - **Drawn again after the game sheathes them.** If your weapons were out and the game puts them away (looting,
-  leaving combat), they're drawn again once the loot window closes.
+  leaving combat), they're drawn again once the loot window closes. *Delay Before Drawing Again* (0.25 to 5
+  seconds) waits longer first, counted again from the end of looting or a cast, to give you time to loot and skin.
+  Drawing brings back the weapon you last had out, ranged included (Forever).
 - **Your choice wins.** Putting them away with the Sheathe/Unsheathe key (Z by default), sitting or an emote is left
   alone.
 - **After eating or drinking.** Weapons that were out are drawn again once the food or drink is gone and you get up

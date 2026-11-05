@@ -21,13 +21,16 @@ local STEP_RETRY = 0.8             -- a second press that didn't take is tried a
 local STEP_TRIES = 3
 local POLL_INTERVAL = 0.1
 local USER_WINDOW = 1.5            -- a sheathe this soon after your own key press (or sitting) is yours
-local REDRAW_DELAY = 0.3           -- let the game finish what it's doing before drawing again
+-- Drawing again waits this long (Options: Delay Before Drawing Again), counted from the sheathe, and from the end of
+-- looting, talking or casting: time to loot and start skinning first.
 local REDRAW_GIVE_UP = 30          -- a redraw still blocked after this long is dropped
 local RETRY_AFTER = 1              -- a draw that didn't take is tried again after this long, once
 local FIGHT_WINDOW = 2             -- the game sheathing again this soon after a draw means it wants them away
 local FIGHT_LIMIT = 2              -- and after this many in a row, they're left away
 
-local DEFAULTS = { drawOnTarget = false, drawOnCombat = false, sheatheAfterCombat = false, sheatheDelay = 3 }
+local DEFAULTS = {
+    drawOnTarget = false, drawOnCombat = false, sheatheAfterCombat = false, sheatheDelay = 3, redrawDelay = 0.25,
+}
 local CHAR_DEFAULTS = { enabled = true }
 
 local lastState
@@ -47,6 +50,10 @@ end
 
 local function Tracing()
     return SmartSheatheDB and SmartSheatheDB.trace == true
+end
+
+local function RedrawDelay()
+    return SmartSheatheDB and SmartSheatheDB.redrawDelay or DEFAULTS.redrawDelay
 end
 
 -- Trace lines are also kept in SmartSheatheDB.traceLog (the last TRACE_LOG_MAX), so they can be read from the saved
@@ -243,7 +250,7 @@ local function OnSheathed()
     end
     Trace("sheathed by the game, drawing again")
     pendingSince = GetTime()
-    pendingAt = pendingSince + REDRAW_DELAY
+    pendingAt = pendingSince + RedrawDelay()
     tries = 0
 end
 
@@ -266,7 +273,7 @@ local function TryRedraw(now)
     -- waiting for looting, talking or casting to finish doesn't count toward giving up (a vendor can take a while)
     if Busy() then
         pendingSince = now
-        pendingAt = math.max(pendingAt, now + REDRAW_DELAY)
+        pendingAt = math.max(pendingAt, now + RedrawDelay())
         return
     end
     if now < pendingAt then return end
@@ -412,6 +419,12 @@ page:Checkbox("Enable on This Character",
     end)
 
 page:Header("Draw Weapons")
+local getRedraw, setRedraw = option("redrawDelay")
+page:Slider("Delay Before Drawing Again", 0.25, 5, 0.25, getRedraw, setRedraw,
+    function(value) return ("%.2f sec"):format(value) end,
+    "How long to wait before drawing your weapons again after the game puts them away. The wait starts again once "
+        .. "the loot window closes or a cast (like skinning) ends, so a longer delay gives you time to loot and start "
+        .. "skinning first.", needsEnabled)
 local getTarget, setTarget = option("drawOnTarget")
 page:Checkbox("When Targeting an Enemy", getTarget, setTarget,
     "Draw your weapons when you target something you can attack (and that's still alive).", needsEnabled)
