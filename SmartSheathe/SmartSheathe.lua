@@ -8,10 +8,14 @@
 --   - anything else (looting, talking to an NPC, leaving combat): drawn again once the loot window or NPC is closed
 --     and nothing is being cast; if the game keeps putting them straight back away, they're left away
 -- Optionally, weapons are also drawn when you target an enemy or enter combat.
+-- Drawing brings back the weapon you last had out: melee, or (with a ranged weapon on Forever) your bow, gun or wand.
 
 local addonName, ns = ...
 
 local SHEATHED = 1                 -- GetSheathState: 1 = sheathed, 2 = melee drawn, 3 = ranged drawn
+local MELEE = 2
+local RANGED = 3
+local STEP_GIVE_UP = 2             -- a second key press waiting for the first one to take is dropped after this long
 local POLL_INTERVAL = 0.1
 local USER_WINDOW = 1.5            -- a sheathe this soon after your own key press (or sitting) is yours
 local REDRAW_DELAY = 0.3           -- let the game finish what it's doing before drawing again
@@ -112,12 +116,51 @@ local function Busy()
     return nil
 end
 
-local function Draw(why)
+-- With a ranged weapon equipped (Forever), the Sheathe/Unsheathe key cycles sheathed -> melee -> ranged -> sheathed.
+-- So bringing the bow back out is two presses, and putting melee away is two presses too (melee -> ranged ->
+-- sheathed). The second press waits for the first one to show in the sheath state.
+local lastDrawn = MELEE            -- the weapon last seen out
+local nextStep                     -- { from = state to press again at, give = time to give up }
+
+local function Toggle()
     ourToggle = true
     ToggleSheath()
     ourToggle = false
+end
+
+local function HasRangedWeapon()
+    return INVSLOT_RANGED and GetInventoryItemID("player", INVSLOT_RANGED) ~= nil
+end
+
+local function Draw(why)
+    Toggle()
     lastDrawAt = GetTime()
-    Trace("drawing weapons (%s)", why)
+    if lastDrawn == RANGED and HasRangedWeapon() then
+        nextStep = { from = MELEE, give = GetTime() + STEP_GIVE_UP }
+        Trace("drawing ranged weapon (%s)", why)
+    else
+        nextStep = nil
+        Trace("drawing weapons (%s)", why)
+    end
+end
+
+local function Sheathe()
+    local fromMelee = GetSheathState() == MELEE and HasRangedWeapon()
+    Toggle()
+    nextStep = fromMelee and { from = RANGED, give = GetTime() + STEP_GIVE_UP } or nil
+end
+
+-- Called by the poller: the second press, once the first one shows
+local function CheckNextStep(state)
+    if not nextStep then return end
+    if GetTime() > nextStep.give then
+        Trace("second key press dropped (the first didn't take)")
+        nextStep = nil
+    elseif state == nextStep.from then
+        nextStep = nil
+        Toggle()
+        if state == RANGED then userUntil = GetTime() + USER_WINDOW end
+    end
 end
 
 local function CancelRedraw(why)
@@ -144,7 +187,10 @@ local function MarkUser(why)
 end
 
 hooksecurefunc("ToggleSheath", function()
-    if not ourToggle then MarkUser("sheathe key") end
+    if not ourToggle then
+        nextStep = nil
+        MarkUser("sheathe key")
+    end
 end)
 -- Sitting puts weapons away too
 if SitStandOrDescendStart then
@@ -248,6 +294,9 @@ poller:SetScript("OnUpdate", function(_, delta)
         end
     end
     lastState = state
+    -- remember which weapon you had out, so a redraw brings that one back (not while our own presses are cycling)
+    if state ~= SHEATHED and not nextStep then lastDrawn = state end
+    CheckNextStep(state)
     if pendingSince then TryRedraw(GetTime()) end
     if afterEating then CheckMealDone() end
 end)
@@ -294,9 +343,7 @@ local function SheatheAfterCombat()
         CancelSheathe()
         CancelRedraw("sheathing after combat")
         userUntil = GetTime() + USER_WINDOW
-        ourToggle = true
-        ToggleSheath()
-        ourToggle = false
+        Sheathe()
         Trace("sheathing weapons (out of combat)")
     end)
 end
@@ -305,6 +352,7 @@ local function UpdatePolling()
     poller:SetShown(Enabled() and true or false)
     lastState = GetSheathState()
     pendingSince = nil
+    nextStep = nil
     afterEating = false
 end
 
